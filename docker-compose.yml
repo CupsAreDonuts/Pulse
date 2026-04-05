@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: pulse-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+      - pulse_db_data:/var/lib/postgresql/data
+      - ./core/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+
+  grafana:
+    image: grafana/grafana-oss
+    container_name: pulse-viz
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - TZ=${TZ}
+    volumes:
+      - pulse_grafana_data:/var/lib/grafana
+
+volumes:
+  pulse_db_data:
+  pulse_grafana_data:
