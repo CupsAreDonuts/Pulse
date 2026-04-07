@@ -1,5 +1,6 @@
 import hashlib
 import os
+import sys
 import urllib.parse
 from pathlib import Path
 
@@ -11,7 +12,8 @@ from sqlalchemy.engine import Engine
 
 def process():
     load_dotenv()
-    latest_csv = get_latest_csv()
+    csv_dir = load_csv_dir()
+    latest_csv = get_latest_csv(csv_dir=csv_dir)
     banking_information = pd.read_csv(
         latest_csv, sep=";", encoding="latin1", decimal=","
     )
@@ -20,11 +22,17 @@ def process():
 
     upsert_sparkasse_transactions(engine=engine, pulse_sparkasse=pulse_sparkasse)
     print(f"Import complete. Processed {len(pulse_sparkasse)} rows.")
+    print("Archiving csv files...")
+    archive_processed_csv(csv_dir=csv_dir)
 
 
-def get_latest_csv():
+def get_latest_csv(csv_dir: Path):
     csv_directory = load_csv_dir()
     csv_files = [csv_file for csv_file in csv_directory.glob("*.CSV")]
+    if not csv_files:
+        print("No csv file found, terminating program")
+        sys.exit(0)
+
     latest_file = max(csv_files, key=os.path.getmtime)
     return latest_file
 
@@ -99,6 +107,16 @@ def upsert_sparkasse_transactions(engine: Engine, pulse_sparkasse: pd.DataFrame)
         conn.execute(upsert_query)
         # 3. Cleanup
         conn.execute(text("DROP TABLE temp_transactions;"))
+
+
+def archive_processed_csv(csv_dir: Path):
+    archive_path = csv_dir / "archive"
+    archive_path.mkdir(exist_ok=True)
+    for csv_file in csv_dir.glob("*.CSV"):
+        destination = archive_path / csv_file.name
+        # Move the file with rename
+        csv_file.rename(destination)
+        print(f"Archived: {csv_file.name}")
 
 
 if __name__ == "__main__":

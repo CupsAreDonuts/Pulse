@@ -1,3 +1,4 @@
 .env
 monitoring/grafana/*
 !.monitoring/grafana/.gitkeep
+pulse_anacron_log.txt
