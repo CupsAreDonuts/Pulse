@@ -7,9 +7,13 @@ up:
 down:
 	docker compose down
 
-reset:
-	docker compose down -v
-	docker compose up -d
+# --- Collectors ---
+sparkasse-collector:
+	docker compose run --rm --build sparkasse-collector
+
+# reset:
+#	docker compose down -v
+#	docker compose up -d
 
 db-shell:
 	docker exec -it pulse-db psql -U $(DB_USER) -d $(DB_NAME)

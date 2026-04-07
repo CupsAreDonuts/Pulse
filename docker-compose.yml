@@ -13,6 +13,11 @@ services:
       - ./core/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   grafana:
     image: grafana/grafana-oss
@@ -27,6 +32,27 @@ services:
       - TZ=${TZ}
     volumes:
       - pulse_grafana_data:/var/lib/grafana
+
+# ------ Collectors ------
+  sparkasse-collector:
+    build:
+      context: ./collectors/finances/sparkasse
+      dockerfile: Dockerfile
+    container_name: pulse-sparkasse
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=db
+      # Transport environment variables to docker container
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PORT=${DB_PORT}
+      - SPARKASSE_CSV_DIR=/data
+    volumes:
+      - ${SPARKASSE_CSV_DIR}:/data
 
 volumes:
   pulse_db_data:
