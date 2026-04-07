@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 
 
 def process():
@@ -14,6 +15,25 @@ def process():
     banking_information = pd.read_csv(
         latest_csv, sep=";", encoding="latin1", decimal=","
     )
+    pulse_sparkasse = generate_transactions(banking_information)
+    engine = generate_engine()
+
+    upsert_sparkasse_transactions(engine=engine, pulse_sparkasse=pulse_sparkasse)
+    print(f"Import complete. Processed {len(pulse_sparkasse)} rows.")
+
+
+def get_latest_csv():
+    csv_directory = load_csv_dir()
+    csv_files = [csv_file for csv_file in csv_directory.glob("*.CSV")]
+    latest_file = max(csv_files, key=os.path.getmtime)
+    return latest_file
+
+
+def load_csv_dir():
+    return Path(os.getenv("SPARKASSE_CSV_DIR"))
+
+
+def generate_transactions(banking_information: pd.DataFrame) -> pd.DataFrame:
     pulse_sparkasse = pd.DataFrame(
         {
             "timestamp": pd.to_datetime(
@@ -30,10 +50,32 @@ def process():
     pulse_sparkasse["hash_id"] = pulse_sparkasse.apply(
         generate_transaction_id, axis=1
     )
+    return pulse_sparkasse
 
+
+def generate_transaction_id(row):
+    transaction_string = (
+        f"{row['timestamp']}{row['amount']}{row['description']}{row['source_account']}"
+    )
+    return hashlib.sha256(transaction_string.encode()).hexdigest()
+
+
+def generate_engine() -> Engine:
     db_url = get_database_url()
     engine = create_engine(db_url)
+    return engine
 
+
+def get_database_url():
+    user = os.getenv("DB_USER")
+    pw = urllib.parse.quote_plus(os.getenv("DB_PASSWORD"))
+    db_name = os.getenv("DB_NAME")
+    host = os.getenv("DB_HOST")
+    port = os.getenv("DB_PORT")
+    return f"postgresql://{user}:{pw}@{host}:{port}/{db_name}"
+
+
+def upsert_sparkasse_transactions(engine: Engine, pulse_sparkasse: pd.DataFrame):
     # 1. Upload to a temporary staging table
     # 'replace' ensures the temp table is fresh every time the script runs
     pulse_sparkasse.to_sql(
@@ -57,35 +99,6 @@ def process():
         conn.execute(upsert_query)
         # 3. Cleanup
         conn.execute(text("DROP TABLE temp_transactions;"))
-
-    print(f"Import complete. Processed {len(pulse_sparkasse)} rows.")
-
-
-def get_latest_csv():
-    csv_directory = load_csv_dir()
-    csv_files = [csv_file for csv_file in csv_directory.glob("*.CSV")]
-    latest_file = max(csv_files, key=os.path.getmtime)
-    return latest_file
-
-
-def load_csv_dir():
-    return Path(os.getenv("SPARKASSE_CSV_DIR"))
-
-
-def generate_transaction_id(row):
-    transaction_string = (
-        f"{row['timestamp']}{row['amount']}{row['description']}{row['source_account']}"
-    )
-    return hashlib.sha256(transaction_string.encode()).hexdigest()
-
-
-def get_database_url():
-    user = os.getenv("DB_USER")
-    pw = urllib.parse.quote_plus(os.getenv("DB_PASSWORD"))
-    db_name = os.getenv("DB_NAME")
-    host = os.getenv("DB_HOST")
-    port = os.getenv("DB_PORT")
-    return f"postgresql://{user}:{pw}@{host}:{port}/{db_name}"
 
 
 if __name__ == "__main__":
