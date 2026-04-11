@@ -33,6 +33,19 @@ services:
     volumes:
       - pulse_grafana_data:/var/lib/grafana
 
+# ------ Communication ------
+  signal-api:
+    image: bbernhard/signal-cli-rest-api
+    container_name: pulse-signal
+    restart: always
+    environment:
+      - MODE=json-rpc  # Fastest mode for alerts
+      - TZ=${TZ}
+    volumes:
+      - ./signal-data:/home/.local/share/signal-cli # Store your keys here
+    ports:
+      - "8080:8080"
+
 # ------ Collectors ------
   sparkasse-collector:
     build:
